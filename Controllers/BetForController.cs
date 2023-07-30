@@ -1,20 +1,22 @@
-using Microsoft.AspNetCore.Mvc;
 using BetForGateway.Dtos;
+using BetForGateway.Helpers;
+using Microsoft.AspNetCore.Mvc;
 
-namespace YourWebApiNamespace.Controllers
+namespace BetForGateway.Controllers
 {
     [ApiController]
     [Route("[controller]")]
-    public class ExternalApiController : ControllerBase
+    public class BetController : ControllerBase
     {
         private readonly HttpClient _httpClient;
 
-        public ExternalApiController(HttpClient httpClient)
+        public BetController(HttpClient httpClient)
         {
             _httpClient = httpClient;
         }
 
         [HttpGet]
+        [Route("TryGetCurrentTour")]
         public async Task<IActionResult> GetExternalData()
         {
             try
@@ -23,11 +25,17 @@ namespace YourWebApiNamespace.Controllers
 
                 var response = await _httpClient.GetAsync("Tour/GetTourInfo");
 
-                response.EnsureSuccessStatusCode();
+                if (response.IsSuccessStatusCode == true)
+                {
+                    var data = await response.Content.ReadFromJsonAsync<CurrentTourResponse>();
 
-                var data = await response.Content.ReadFromJsonAsync<object>();
+                    if (data != null)
+                    {
+                        return Ok(data);
+                    }
+                }
 
-                return Ok(data);
+                return BadRequest();
             }
             catch (HttpRequestException ex)
             {
@@ -36,19 +44,32 @@ namespace YourWebApiNamespace.Controllers
         }
 
         [HttpPost]
+        [Route("TryBet")]
         public async Task<IActionResult> PostExternalData([FromBody] BetRequest request)
         {
             try
             {
+                Guard.NotNull<BetRequest>(request);
+
                 _httpClient.BaseAddress = new Uri("https://localhost:7237/api/");
 
-                var response = await _httpClient.PostAsJsonAsync("Tour/TryBetForCurrentTour", request);
+                var response = await _httpClient.PostAsJsonAsync("Client/CreateBet", request);
 
-                response.EnsureSuccessStatusCode();
+                if (response.IsSuccessStatusCode == true)
+                {
+                    var data = await response.Content.ReadFromJsonAsync<TryBetResponse>();
 
-                var data = await response.Content.ReadFromJsonAsync<object>();
+                    if (data != null)
+                    {
+                        return Ok(data);
+                    }
+                }
 
-                return Ok(data);
+                return BadRequest(new TryBetResponse
+                {
+                    IsCreated = false,
+                    ResponseMessage = "Bet is not created!"
+                });
             }
             catch (HttpRequestException ex)
             {
